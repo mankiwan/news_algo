@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+downloads/
+results/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env
