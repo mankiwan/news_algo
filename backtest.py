@@ -60,8 +60,8 @@ def get_prices_at_timestamps(price_df, timestamps, price_column='close'):
     return result_df
 
 
-def execute_backtest_strategy(price_df, news_df, token_col):
-    """Execute the BTC news trading strategy"""
+def execute_backtest_strategy(price_df, news_df, token_col, selected_crypto):
+    """Execute the news trading strategy for selected cryptocurrency"""
     
     # Sort by unix timestamp
     news_df_sorted = news_df.sort_values(by='unix_timestamp').copy()
@@ -69,52 +69,61 @@ def execute_backtest_strategy(price_df, news_df, token_col):
     
     print(f"\nUnique tokens found: {news_df_sorted[token_col].dropna().unique()}")
     
-    # Filter for BTC tokens only
-    token_mask = news_df_sorted[token_col].astype(str).str.upper().str.contains('BTC', na=False)
+    # Filter for selected cryptocurrency tokens only
+    if selected_crypto == "BTC":
+        crypto_patterns = ['BTC', 'BITCOIN']
+    elif selected_crypto == "ETH":
+        crypto_patterns = ['ETH', 'ETHEREUM']
+    else:
+        print(f"Unsupported cryptocurrency: {selected_crypto}")
+        return pd.DataFrame(), []
+    
+    # Create mask for any of the crypto patterns
+    token_mask = news_df_sorted[token_col].astype(str).str.upper().str.contains('|'.join(crypto_patterns), na=False)
     timestamp_mask = news_df_sorted['unix_timestamp'].notna()
     valid_mask = token_mask & timestamp_mask
     
-    btc_news = news_df_sorted[valid_mask].copy()
+    crypto_news = news_df_sorted[valid_mask].copy()
     
-    if len(btc_news) == 0:
-        print("No valid BTC news events found!")
+    if len(crypto_news) == 0:
+        print(f"No valid {selected_crypto} news events found!")
         return pd.DataFrame(), []
     
-    print(f"\nProcessing {len(btc_news)} BTC news events...")
+    print(f"\nProcessing {len(crypto_news)} {selected_crypto} news events...")
     
     # Sort price data by timestamp for efficient searching
     price_df_sorted = price_df.sort_values('unix_timestamp').copy()
     
     # Get prices for all events at once
-    timestamps = btc_news['unix_timestamp'].values
+    timestamps = crypto_news['unix_timestamp'].values
     price_results = get_prices_at_timestamps(price_df_sorted, timestamps)
     
     # Merge price results with news data
-    btc_news = btc_news.reset_index(drop=True)
-    btc_news = pd.concat([btc_news, price_results[['price_current', 'price_1min', 'price_10min']]], axis=1)
+    crypto_news = crypto_news.reset_index(drop=True)
+    crypto_news = pd.concat([crypto_news, price_results[['price_current', 'price_1min', 'price_10min']]], axis=1)
     
     # Remove rows with missing price data
-    price_mask = btc_news[['price_current', 'price_1min', 'price_10min']].notna().all(axis=1)
-    btc_news = btc_news[price_mask].copy()
+    price_mask = crypto_news[['price_current', 'price_1min', 'price_10min']].notna().all(axis=1)
+    crypto_news = crypto_news[price_mask].copy()
     
-    if len(btc_news) == 0:
+    if len(crypto_news) == 0:
         print("No valid price data found for news events!")
         return pd.DataFrame(), []
     
-    print(f"Found price data for {len(btc_news)} events")
+    print(f"Found price data for {len(crypto_news)} events")
     
     # Calculate 1-minute price change percentage
-    btc_news['price_change_1min'] = (btc_news['price_1min'] - btc_news['price_current']) / btc_news['price_current']
+    crypto_news['price_change_1min'] = (crypto_news['price_1min'] - crypto_news['price_current']) / crypto_news['price_current']
     
     # Determine position: 1 if positive change, -1 if negative
-    btc_news['position'] = np.where(btc_news['price_change_1min'] > 0, 1, -1)
+    crypto_news['position'] = np.where(crypto_news['price_change_1min'] > 0, 1, -1)
     
     # Calculate return after 10 minutes
-    btc_news['price_change_10min'] = (btc_news['price_10min'] - btc_news['price_current']) / btc_news['price_current']
-    btc_news['trade_return'] = btc_news['position'] * btc_news['price_change_10min']
+    crypto_news['price_change_10min'] = (crypto_news['price_10min'] - crypto_news['price_current']) / crypto_news['price_current']
+    crypto_news['trade_return'] = crypto_news['position'] * crypto_news['price_change_10min']
     
     # Clean up token column
-    btc_news['token'] = btc_news[token_col].astype(str).str.upper().str.strip()
+    crypto_news['token'] = crypto_news[token_col].astype(str).str.upper().str.strip()
     
     # Select relevant columns for results
     result_columns = [
@@ -122,7 +131,7 @@ def execute_backtest_strategy(price_df, news_df, token_col):
         'price_change_1min', 'position', 'trade_return'
     ]
     
-    results_df = btc_news[result_columns].copy()
+    results_df = crypto_news[result_columns].copy()
     returns = results_df['trade_return'].tolist()
     
     # Print summary statistics

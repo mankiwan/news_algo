@@ -10,3 +10,6 @@ env/
 ENV/
 .venv/
 .env
+
+# Claude
+CLAUDE.md

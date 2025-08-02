@@ -175,6 +175,25 @@ def select_excel_file():
         except ValueError:
             print("Please enter a valid number.")
 
+def select_cryptocurrency():
+    """Prompt user to select cryptocurrency for backtesting"""
+    print("\nSelect cryptocurrency for backtesting:")
+    print("1. BTC (Bitcoin)")
+    print("2. ETH (Ethereum)")
+    
+    while True:
+        try:
+            choice = input("\nEnter your choice (1 or 2): ").strip()
+            if choice == "1":
+                return "BTC"
+            elif choice == "2":
+                return "ETH"
+            else:
+                print("Invalid selection. Please enter 1 for BTC or 2 for ETH.")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled.")
+            return None
+
 def get_column_mappings(news_df):
     """Get column mappings from user"""
     print("\nPlease identify the key columns:")
@@ -235,12 +254,17 @@ def main():
         return
     
     # Step 4: Load news data  
-    print(f"\nLoading Excel file: {os.path.basename(excel_file)}")
+    print(f"\nLoading news data from Excel file: {os.path.basename(excel_file)}")
     news_df = load_excel_data(excel_file)
     if news_df is None:
         return
     
-    # Step 5: Get column mappings
+    # Step 5: Select cryptocurrency
+    selected_crypto = select_cryptocurrency()
+    if selected_crypto is None:
+        return
+    
+    # Step 6: Get column mappings
     date_col, time_col, token_col = get_column_mappings(news_df)
     if date_col is None or token_col is None:
         return
@@ -249,15 +273,16 @@ def main():
     if time_col:
         print(f"Using time column: {time_col}")
     print(f"Using token column: {token_col}")
+    print(f"Selected cryptocurrency: {selected_crypto}")
     
     # Convert dates and times to unix timestamps
     print("\nConverting dates and times to unix timestamps...")
     time_series = news_df[time_col] if time_col else None
     news_df['unix_timestamp'] = convert_to_unix_timestamp(news_df[date_col], time_series)
     
-    # Step 6: Execute backtest strategy
+    # Step 7: Execute backtest strategy
     print("\nExecuting backtest strategy...")
-    results_df, returns = execute_backtest_strategy(price_df, news_df, token_col)
+    results_df, returns = execute_backtest_strategy(price_df, news_df, token_col, selected_crypto)
     
     # Step 7: Calculate and display performance metrics
     if returns:
