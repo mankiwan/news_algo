@@ -5,10 +5,10 @@ def calculate_performance_metrics(returns):
     if len(returns) == 0:
         return {}
     
-    # Convert to numpy array for faster calculations
+    # Convert to numpy array for calculations
     returns_array = np.array(returns)
     
-    # Basic metrics (vectorized)
+    # Basic metrics
     num_trades = len(returns_array)
     total_return = np.prod(1 + returns_array) - 1
     
@@ -19,20 +19,20 @@ def calculate_performance_metrics(returns):
     
     annualized_return = (1 + total_return) ** (periods_per_year / num_trades) - 1 if num_trades > 0 else 0
     
-    # Vectorized cumulative returns and drawdown calculation
+    # Calculate cumulative returns and drawdown
     cumulative_returns = np.cumprod(1 + returns_array)
     running_max = np.maximum.accumulate(cumulative_returns)
     drawdowns = (cumulative_returns - running_max) / running_max
     max_drawdown = np.min(drawdowns)
     
-    # Vectorized volatility calculation
+    # Calculate volatility
     volatility = np.std(returns_array, ddof=1) * np.sqrt(periods_per_year)
     sharpe_ratio = annualized_return / volatility if volatility > 0 else 0
     
     # Calmar ratio
     calmar_ratio = annualized_return / abs(max_drawdown) if max_drawdown < 0 else 0
     
-    # Vectorized win/loss metrics
+    # Calculate win/loss metrics
     win_mask = returns_array > 0
     loss_mask = returns_array < 0
     

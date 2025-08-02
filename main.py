@@ -72,7 +72,7 @@ def load_excel_data(filepath):
         return None
 
 def convert_to_unix_timestamp(date_series, time_series=None):
-    """Convert date and time columns to unix timestamp using vectorized operations"""
+    """Convert date and time columns to unix timestamp"""
     
     # Convert to pandas Series if not already
     if not isinstance(date_series, pd.Series):
@@ -141,7 +141,6 @@ def convert_to_unix_timestamp(date_series, time_series=None):
     else:
         final_dt = date_dt
     
-    # Convert to unix timestamps using vectorized operations
     # Convert datetime to unix timestamp (seconds since epoch)
     unix_timestamps = (final_dt - pd.Timestamp("1970-01-01")) // pd.Timedelta('1s')
     

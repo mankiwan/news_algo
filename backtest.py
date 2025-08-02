@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 
-def get_prices_at_timestamps_vectorized(price_df, timestamps, price_column='close'):
-    """Vectorized function to get prices at multiple timestamps with +1min and +10min offsets"""
+def get_prices_at_timestamps(price_df, timestamps, price_column='close'):
+    """Get prices at multiple timestamps with +1min and +10min offsets"""
     if price_df is None or len(timestamps) == 0:
         return pd.DataFrame()
     
@@ -16,7 +16,7 @@ def get_prices_at_timestamps_vectorized(price_df, timestamps, price_column='clos
     # Prepare price timestamps for broadcasting
     price_timestamps = price_df['unix_timestamp'].values
     
-    # Vectorized closest timestamp finding using searchsorted
+    # Find closest timestamps using binary search
     def find_closest_prices(target_timestamps, tolerance=120):
         # Find insertion points
         indices = np.searchsorted(price_timestamps, target_timestamps)
@@ -44,7 +44,7 @@ def get_prices_at_timestamps_vectorized(price_df, timestamps, price_column='clos
         
         return prices
     
-    # Get prices for all timestamp sets
+    # Get prices for all timestamps
     prices_current = find_closest_prices(timestamps)
     prices_1min = find_closest_prices(timestamps_1min)
     prices_10min = find_closest_prices(timestamps_10min)
@@ -61,7 +61,7 @@ def get_prices_at_timestamps_vectorized(price_df, timestamps, price_column='clos
 
 
 def execute_backtest_strategy(price_df, news_df, token_col):
-    """Execute the BTC news trading strategy using vectorized operations"""
+    """Execute the BTC news trading strategy"""
     
     # Sort by unix timestamp
     news_df_sorted = news_df.sort_values(by='unix_timestamp').copy()
@@ -69,7 +69,7 @@ def execute_backtest_strategy(price_df, news_df, token_col):
     
     print(f"\nUnique tokens found: {news_df_sorted[token_col].dropna().unique()}")
     
-    # Filter for BTC tokens only using vectorized operations
+    # Filter for BTC tokens only
     token_mask = news_df_sorted[token_col].astype(str).str.upper().str.contains('BTC', na=False)
     timestamp_mask = news_df_sorted['unix_timestamp'].notna()
     valid_mask = token_mask & timestamp_mask
@@ -85,9 +85,9 @@ def execute_backtest_strategy(price_df, news_df, token_col):
     # Sort price data by timestamp for efficient searching
     price_df_sorted = price_df.sort_values('unix_timestamp').copy()
     
-    # Get prices for all events at once using vectorized function
+    # Get prices for all events at once
     timestamps = btc_news['unix_timestamp'].values
-    price_results = get_prices_at_timestamps_vectorized(price_df_sorted, timestamps)
+    price_results = get_prices_at_timestamps(price_df_sorted, timestamps)
     
     # Merge price results with news data
     btc_news = btc_news.reset_index(drop=True)
@@ -103,14 +103,13 @@ def execute_backtest_strategy(price_df, news_df, token_col):
     
     print(f"Found price data for {len(btc_news)} events")
     
-    # Vectorized calculations
     # Calculate 1-minute price change percentage
     btc_news['price_change_1min'] = (btc_news['price_1min'] - btc_news['price_current']) / btc_news['price_current']
     
-    # Determine position: 1 if positive change, -1 if negative (vectorized)
+    # Determine position: 1 if positive change, -1 if negative
     btc_news['position'] = np.where(btc_news['price_change_1min'] > 0, 1, -1)
     
-    # Calculate return after 10 minutes (vectorized)
+    # Calculate return after 10 minutes
     btc_news['price_change_10min'] = (btc_news['price_10min'] - btc_news['price_current']) / btc_news['price_current']
     btc_news['trade_return'] = btc_news['position'] * btc_news['price_change_10min']
     
