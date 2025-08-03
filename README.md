@@ -47,7 +47,8 @@ pip install -r requirements.txt
 
 ```
 news_algo/
-├── main.py              # Main execution script with user interface
+├── main.py              # Main execution script and workflow orchestration
+├── data_loader.py       # Data loading and file selection utilities
 ├── backtest.py          # Core backtesting strategy logic
 ├── performance.py       # Performance metrics calculations
 ├── plotting.py          # Visualization and charting functions
@@ -55,7 +56,7 @@ news_algo/
 ├── requirements.txt     # Python dependencies
 ├── news/               # News data directory
 │   └── *.xlsx         # Excel files with news data
-├── downloads/          # Price data directory
+├── downloads/          # Price data directory (CSV from data_loader.py saves here)
 │   └── *.csv          # CSV files with price data
 └── results/            # Output directory
     ├── *.csv          # Backtest results

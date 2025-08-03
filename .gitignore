@@ -11,5 +11,7 @@ ENV/
 .venv/
 .env
 
-# Claude
+# Files
 CLAUDE.md
+small_backtest.py
+debug_timestamps.py
