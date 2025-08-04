@@ -15,3 +15,4 @@ ENV/
 CLAUDE.md
 small_backtest.py
 debug_timestamps.py
+test_trading_costs.py

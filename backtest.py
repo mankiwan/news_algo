@@ -60,8 +60,8 @@ def get_prices_at_timestamps(price_df, timestamps, price_column='close'):
     return result_df
 
 
-def execute_backtest_strategy(price_df, news_df, token_col, selected_crypto):
-    """Execute the news trading strategy for selected cryptocurrency"""
+def execute_backtest_strategy(price_df, news_df, token_col, selected_crypto, trading_costs=None):
+    """Execute the news trading strategy for selected cryptocurrency with transaction costs"""
     
     # Sort by unix timestamp
     news_df_sorted = news_df.sort_values(by='unix_timestamp').copy()
@@ -120,7 +120,28 @@ def execute_backtest_strategy(price_df, news_df, token_col, selected_crypto):
     
     # Calculate return after 10 minutes
     crypto_news['price_change_10min'] = (crypto_news['price_10min'] - crypto_news['price_current']) / crypto_news['price_current']
-    crypto_news['trade_return'] = crypto_news['position'] * crypto_news['price_change_10min']
+    
+    # Apply transaction costs and slippage if provided
+    if trading_costs is not None:
+        transaction_cost = trading_costs.get('transaction_cost', 0)
+        slippage = trading_costs.get('slippage', 0)
+        total_cost = transaction_cost + slippage
+        
+        # Calculate gross return first
+        gross_return = crypto_news['position'] * crypto_news['price_change_10min']
+        
+        # Apply costs: subtract total cost for each trade (entry + exit)
+        # Each trade incurs costs twice: once when entering, once when exiting
+        crypto_news['trade_return'] = gross_return - (2 * total_cost * np.abs(crypto_news['position']))
+        
+        print(f"\nApplying trading costs:")
+        print(f"- Transaction cost: {transaction_cost*100:.3f}% per trade")
+        print(f"- Slippage: {slippage*100:.3f}% per trade") 
+        print(f"- Total cost per round trip: {2*total_cost*100:.3f}%")
+    else:
+        # No costs applied
+        crypto_news['trade_return'] = crypto_news['position'] * crypto_news['price_change_10min']
+        print(f"\nNo trading costs applied (ideal conditions)")
     
     # Clean up token column
     crypto_news['token'] = crypto_news[token_col].astype(str).str.upper().str.strip()

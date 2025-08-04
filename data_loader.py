@@ -215,6 +215,75 @@ def select_cryptocurrency():
             return None
 
 
+def get_trading_costs():
+    """Prompt user for transaction costs and slippage parameters"""
+    print("\n" + "="*50)
+    print("TRADING COSTS CONFIGURATION")
+    print("="*50)
+    print("Configure realistic trading costs for the backtest:")
+    
+    # Default values
+    default_transaction_cost = 0.001  # 0.1% per trade (typical for crypto exchanges)
+    default_slippage = 0.0005        # 0.05% slippage (market impact)
+    
+    print(f"\nDefault values:")
+    print(f"- Transaction cost: {default_transaction_cost*100:.3f}% per trade")
+    print(f"- Slippage: {default_slippage*100:.3f}% per trade")
+    
+    # Ask if user wants to use defaults
+    use_defaults = input("\nUse default trading costs? (y/n): ").strip().lower()
+    
+    if use_defaults in ['y', 'yes', '']:
+        transaction_cost = default_transaction_cost
+        slippage = default_slippage
+        print(f"Using default values.")
+    else:
+        # Get custom transaction cost
+        while True:
+            try:
+                cost_input = input(f"\nEnter transaction cost % (default {default_transaction_cost*100:.3f}%): ").strip()
+                if not cost_input:
+                    transaction_cost = default_transaction_cost
+                    break
+                
+                cost_percent = float(cost_input)
+                if 0 <= cost_percent <= 5:  # Reasonable range 0-5%
+                    transaction_cost = cost_percent / 100
+                    break
+                else:
+                    print("Please enter a value between 0 and 5%")
+            except ValueError:
+                print("Please enter a valid number")
+        
+        # Get custom slippage
+        while True:
+            try:
+                slip_input = input(f"Enter slippage % (default {default_slippage*100:.3f}%): ").strip()
+                if not slip_input:
+                    slippage = default_slippage
+                    break
+                
+                slip_percent = float(slip_input)
+                if 0 <= slip_percent <= 2:  # Reasonable range 0-2%
+                    slippage = slip_percent / 100
+                    break
+                else:
+                    print("Please enter a value between 0 and 2%")
+            except ValueError:
+                print("Please enter a valid number")
+    
+    print(f"\nFinal trading costs:")
+    print(f"- Transaction cost: {transaction_cost*100:.3f}% per trade")
+    print(f"- Slippage: {slippage*100:.3f}% per trade")
+    print(f"- Total cost per trade: {(transaction_cost + slippage)*100:.3f}%")
+    
+    return {
+        'transaction_cost': transaction_cost,
+        'slippage': slippage,
+        'total_cost_per_trade': transaction_cost + slippage
+    }
+
+
 def get_column_mappings(news_df):
     """Get column mappings from user"""
     print("\nPlease identify the key columns:")

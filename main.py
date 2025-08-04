@@ -25,6 +25,7 @@ from data_loader import (
     convert_to_unix_timestamp,
     select_cryptocurrency,
     get_column_mappings,
+    get_trading_costs,
     save_results
 )
 
@@ -76,11 +77,14 @@ def main():
     time_series = news_df[time_col] if time_col else None
     news_df['unix_timestamp'] = convert_to_unix_timestamp(news_df[date_col], time_series)
     
-    # Step 8: Execute backtest strategy
-    print("\nExecuting backtest strategy...")
-    results_df, returns = execute_backtest_strategy(price_df, news_df, token_col, selected_crypto)
+    # Step 8: Get trading costs configuration
+    trading_costs = get_trading_costs()
     
-    # Step 9: Calculate and display performance metrics
+    # Step 9: Execute backtest strategy
+    print("\nExecuting backtest strategy...")
+    results_df, returns = execute_backtest_strategy(price_df, news_df, token_col, selected_crypto, trading_costs)
+    
+    # Step 10: Calculate and display performance metrics
     if returns:
         metrics = calculate_performance_metrics(returns)
         print_performance_report(metrics)
@@ -95,10 +99,10 @@ def main():
     else:
         print("\nNo valid trades found!")
     
-    # Step 10: Save results
+    # Step 11: Save results
     save_results(results_df)
     
-    # Step 11: Generate plots
+    # Step 12: Generate plots
     if not results_df.empty:
         plot_choice = input("\nGenerate visualization plots? (y/n): ").strip().lower()
         if plot_choice in ['y', 'yes']:
