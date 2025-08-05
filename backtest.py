@@ -89,8 +89,9 @@ def calculate_trading_returns(crypto_news, trading_costs=None, window_col='price
     # Determine position: 1 if positive change, -1 if negative
     crypto_news['position'] = np.where(crypto_news['price_change_window'] > 0, 1, -1)
     
-    # Calculate return after threshold period
-    crypto_news['price_change_threshold'] = (crypto_news[threshold_col] - crypto_news['price_current']) / crypto_news['price_current']
+    # Calculate return after threshold period (from window price to threshold price)
+    # This is the actual trading return since we enter position at window price
+    crypto_news['price_change_threshold'] = (crypto_news[threshold_col] - crypto_news[window_col]) / crypto_news[window_col]
     
     # Apply transaction costs and slippage if provided
     if trading_costs is not None:
