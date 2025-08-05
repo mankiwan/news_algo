@@ -12,10 +12,14 @@ def calculate_performance_metrics(returns):
     num_trades = len(returns_array)
     total_return = np.prod(1 + returns_array) - 1
     
-    # BTC trades 365 days per year (24/7 market)
+    # Calculate annualization factor based on per-trade basis
+    # Since we don't know the actual time period, use a more conservative approach
+    # Assume trades are roughly equally spaced throughout a reasonable time period
     trading_days_per_year = 365
-    avg_trades_per_day = num_trades / num_trades if num_trades > 0 else 1
-    periods_per_year = trading_days_per_year * avg_trades_per_day
+    
+    # For annualization, use the number of trades directly as periods
+    # This treats each trade as an independent period
+    periods_per_year = trading_days_per_year  # Assume roughly 1 trade per day on average
     
     annualized_return = (1 + total_return) ** (periods_per_year / num_trades) - 1 if num_trades > 0 else 0
     
@@ -25,9 +29,22 @@ def calculate_performance_metrics(returns):
     drawdowns = (cumulative_returns - running_max) / running_max
     max_drawdown = np.min(drawdowns)
     
-    # Calculate volatility
-    volatility = np.std(returns_array, ddof=1) * np.sqrt(periods_per_year)
-    sharpe_ratio = annualized_return / volatility if volatility > 0 else 0
+    # Calculate volatility (more conservative approach)
+    # Use the standard deviation of returns and annualize based on actual trade frequency
+    if num_trades > 1:
+        return_std = np.std(returns_array, ddof=1)
+        # Annualize volatility assuming trades are roughly equally spaced
+        volatility = return_std * np.sqrt(min(num_trades, periods_per_year))
+        
+        # Calculate Sharpe ratio with proper zero-volatility handling
+        if volatility > 1e-8:  # Use small threshold instead of exact zero
+            sharpe_ratio = annualized_return / volatility
+        else:
+            # If volatility is essentially zero, Sharpe ratio is undefined
+            sharpe_ratio = 0
+    else:
+        volatility = 0
+        sharpe_ratio = 0
     
     # Calmar ratio
     calmar_ratio = annualized_return / abs(max_drawdown) if max_drawdown < 0 else 0

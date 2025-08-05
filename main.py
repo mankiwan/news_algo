@@ -28,6 +28,13 @@ from data_loader import (
     get_trading_costs,
     save_results
 )
+from optimization import (
+    get_backtest_mode_choice,
+    get_optimization_parameters,
+    run_parameter_optimization,
+    display_optimization_results,
+    save_optimization_results
+)
 
 
 def main():
@@ -77,27 +84,64 @@ def main():
     time_series = news_df[time_col] if time_col else None
     news_df['unix_timestamp'] = convert_to_unix_timestamp(news_df[date_col], time_series)
     
-    # Step 8: Get trading costs configuration
+    # Step 8: Choose backtest mode
+    backtest_mode = get_backtest_mode_choice()
+    if backtest_mode is None:
+        return
+    
+    # Step 9: Get trading costs configuration
     trading_costs = get_trading_costs()
     
-    # Step 9: Execute backtest strategy
-    print("\nExecuting backtest strategy...")
-    results_df, returns = execute_backtest_strategy(price_df, news_df, token_col, selected_crypto, trading_costs)
-    
-    # Step 10: Calculate and display performance metrics
-    if returns:
-        metrics = calculate_performance_metrics(returns)
-        print_performance_report(metrics)
+    # Step 10: Execute backtest strategy based on mode
+    if backtest_mode == "simple":
+        print("\nExecuting simple backtest strategy...")
+        results_df, returns = execute_backtest_strategy(price_df, news_df, token_col, selected_crypto, trading_costs)
+        metrics = None
         
-        # Assess strategy profitability
-        _, assessment = is_strategy_profitable(metrics)
-        print(f"\n{assessment}")
+        # Calculate and display performance metrics
+        if returns:
+            metrics = calculate_performance_metrics(returns)
+            print_performance_report(metrics)
+            
+            # Assess strategy profitability
+            _, assessment = is_strategy_profitable(metrics)
+            print(f"\n{assessment}")
+            
+            # Add metrics to results
+            for key, value in metrics.items():
+                results_df.attrs[key] = value
+        else:
+            print("\nNo valid trades found!")
+            
+    elif backtest_mode == "optimized":
+        print("\nExecuting optimization backtest...")
         
-        # Add metrics to results
-        for key, value in metrics.items():
-            results_df.attrs[key] = value
-    else:
-        print("\nNo valid trades found!")
+        # Get optimization parameters
+        optimization_params = get_optimization_parameters()
+        if optimization_params is None:
+            return
+            
+        # Run optimization
+        optimization_results = run_parameter_optimization(
+            price_df, news_df, token_col, selected_crypto, trading_costs, optimization_params
+        )
+        
+        if optimization_results:
+            # Display optimization results
+            best_result = display_optimization_results(optimization_results, optimization_params)
+            
+            # Save optimization results
+            save_optimization_results(optimization_results, optimization_params)
+            
+            # Use best parameters for final results
+            results_df = best_result['results_df']
+            returns = best_result['returns']
+            metrics = calculate_performance_metrics(returns) if returns else None
+            
+            print(f"\nUsing best parameters for visualization and final results.")
+        else:
+            print("Optimization failed!")
+            return
     
     # Step 11: Save results
     save_results(results_df)

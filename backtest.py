@@ -1,17 +1,17 @@
 import pandas as pd
 import numpy as np
 
-def get_prices_at_timestamps(price_df, timestamps, price_column='close'):
-    """Get prices at multiple timestamps with +1min and +10min offsets"""
+def get_prices_at_timestamps(price_df, timestamps, price_column='close', window=1, threshold=10):
+    """Get prices at multiple timestamps with configurable window and threshold offsets (in minutes)"""
     if price_df is None or len(timestamps) == 0:
         return pd.DataFrame()
     
     # Convert timestamps to numpy array for vectorized operations
     timestamps = np.array(timestamps)
     
-    # Calculate offset timestamps
-    timestamps_1min = timestamps + 60
-    timestamps_10min = timestamps + 600
+    # Calculate offset timestamps using configurable parameters (convert minutes to seconds)
+    timestamps_window = timestamps + (window * 60)
+    timestamps_threshold = timestamps + (threshold * 60)
     
     # Prepare price timestamps for broadcasting
     price_timestamps = price_df['unix_timestamp'].values
@@ -46,80 +46,51 @@ def get_prices_at_timestamps(price_df, timestamps, price_column='close'):
     
     # Get prices for all timestamps
     prices_current = find_closest_prices(timestamps)
-    prices_1min = find_closest_prices(timestamps_1min)
-    prices_10min = find_closest_prices(timestamps_10min)
+    prices_window = find_closest_prices(timestamps_window)
+    prices_threshold = find_closest_prices(timestamps_threshold)
     
     # Create result DataFrame
     result_df = pd.DataFrame({
         'unix_timestamp': timestamps,
         'price_current': prices_current,
-        'price_1min': prices_1min,
-        'price_10min': prices_10min
+        'price_window': prices_window,
+        'price_threshold': prices_threshold
     })
     
     return result_df
 
 
-def execute_backtest_strategy(price_df, news_df, token_col, selected_crypto, trading_costs=None):
-    """Execute the news trading strategy for selected cryptocurrency with transaction costs"""
-    
+def filter_crypto_news(news_df, token_col, selected_crypto):
+    """Filter news data for selected cryptocurrency"""
     # Sort by unix timestamp
     news_df_sorted = news_df.sort_values(by='unix_timestamp').copy()
-    print(f"\nData sorted by unix timestamp")
     
-    print(f"\nUnique tokens found: {news_df_sorted[token_col].dropna().unique()}")
-    
-    # Filter for selected cryptocurrency tokens only
+    # Define crypto patterns
     if selected_crypto == "BTC":
         crypto_patterns = ['BTC', 'BITCOIN']
     elif selected_crypto == "ETH":
         crypto_patterns = ['ETH', 'ETHEREUM']
     else:
-        print(f"Unsupported cryptocurrency: {selected_crypto}")
-        return pd.DataFrame(), []
+        raise ValueError(f"Unsupported cryptocurrency: {selected_crypto}")
     
     # Create mask for any of the crypto patterns
     token_mask = news_df_sorted[token_col].astype(str).str.upper().str.contains('|'.join(crypto_patterns), na=False)
     timestamp_mask = news_df_sorted['unix_timestamp'].notna()
     valid_mask = token_mask & timestamp_mask
     
-    crypto_news = news_df_sorted[valid_mask].copy()
-    
-    if len(crypto_news) == 0:
-        print(f"No valid {selected_crypto} news events found!")
-        return pd.DataFrame(), []
-    
-    print(f"\nProcessing {len(crypto_news)} {selected_crypto} news events...")
-    
-    # Sort price data by timestamp for efficient searching
-    price_df_sorted = price_df.sort_values('unix_timestamp').copy()
-    
-    # Get prices for all events at once
-    timestamps = crypto_news['unix_timestamp'].values
-    price_results = get_prices_at_timestamps(price_df_sorted, timestamps)
-    
-    # Merge price results with news data
-    crypto_news = crypto_news.reset_index(drop=True)
-    crypto_news = pd.concat([crypto_news, price_results[['price_current', 'price_1min', 'price_10min']]], axis=1)
-    
-    # Remove rows with missing price data
-    price_mask = crypto_news[['price_current', 'price_1min', 'price_10min']].notna().all(axis=1)
-    crypto_news = crypto_news[price_mask].copy()
-    
-    if len(crypto_news) == 0:
-        print("No valid price data found for news events!")
-        return pd.DataFrame(), []
-    
-    print(f"Found price data for {len(crypto_news)} events")
-    
-    # Calculate 1-minute price change percentage
-    crypto_news['price_change_1min'] = (crypto_news['price_1min'] - crypto_news['price_current']) / crypto_news['price_current']
+    return news_df_sorted[valid_mask].copy()
+
+
+def calculate_trading_returns(crypto_news, trading_costs=None, window_col='price_window', threshold_col='price_threshold'):
+    """Calculate trading returns with optional costs"""
+    # Calculate window price change percentage (for position determination)
+    crypto_news['price_change_window'] = (crypto_news[window_col] - crypto_news['price_current']) / crypto_news['price_current']
     
     # Determine position: 1 if positive change, -1 if negative
-    crypto_news['position'] = np.where(crypto_news['price_change_1min'] > 0, 1, -1)
+    crypto_news['position'] = np.where(crypto_news['price_change_window'] > 0, 1, -1)
     
-    # Calculate return after 10 minutes
-    crypto_news['price_change_10min'] = (crypto_news['price_10min'] - crypto_news['price_current']) / crypto_news['price_current']
+    # Calculate return after threshold period
+    crypto_news['price_change_threshold'] = (crypto_news[threshold_col] - crypto_news['price_current']) / crypto_news['price_current']
     
     # Apply transaction costs and slippage if provided
     if trading_costs is not None:
@@ -128,39 +99,114 @@ def execute_backtest_strategy(price_df, news_df, token_col, selected_crypto, tra
         total_cost = transaction_cost + slippage
         
         # Calculate gross return first
-        gross_return = crypto_news['position'] * crypto_news['price_change_10min']
+        gross_return = crypto_news['position'] * crypto_news['price_change_threshold']
         
         # Apply costs: subtract total cost for each trade (entry + exit)
-        # Each trade incurs costs twice: once when entering, once when exiting
         crypto_news['trade_return'] = gross_return - (2 * total_cost * np.abs(crypto_news['position']))
-        
-        print(f"\nApplying trading costs:")
-        print(f"- Transaction cost: {transaction_cost*100:.3f}% per trade")
-        print(f"- Slippage: {slippage*100:.3f}% per trade") 
-        print(f"- Total cost per round trip: {2*total_cost*100:.3f}%")
     else:
         # No costs applied
-        crypto_news['trade_return'] = crypto_news['position'] * crypto_news['price_change_10min']
-        print(f"\nNo trading costs applied (ideal conditions)")
+        crypto_news['trade_return'] = crypto_news['position'] * crypto_news['price_change_threshold']
     
-    # Clean up token column
-    crypto_news['token'] = crypto_news[token_col].astype(str).str.upper().str.strip()
+    return crypto_news
+
+
+def execute_backtest_strategy(price_df, news_df, token_col, selected_crypto, trading_costs=None, window=1, threshold=10, verbose=True):
+    """Execute the news trading strategy with configurable parameters (window and threshold in minutes)"""
     
-    # Select relevant columns for results
-    result_columns = [
-        'unix_timestamp', 'token', 'price_current', 'price_1min', 'price_10min',
-        'price_change_1min', 'position', 'trade_return'
-    ]
+    if verbose:
+        print(f"\nData sorted by unix timestamp")
+        print(f"\nUnique tokens found: {news_df[token_col].dropna().unique()}")
     
-    results_df = crypto_news[result_columns].copy()
-    returns = results_df['trade_return'].tolist()
-    
-    # Print summary statistics
-    print(f"\nStrategy Results Summary:")
-    print(f"Total trades: {len(results_df)}")
-    print(f"Average return per trade: {np.mean(returns):.4f}")
-    print(f"Win rate: {(np.array(returns) > 0).mean():.2%}")
-    
-    return results_df, returns
-    
+    try:
+        # Filter crypto news
+        crypto_news = filter_crypto_news(news_df, token_col, selected_crypto)
+        
+        if len(crypto_news) == 0:
+            if verbose:
+                print(f"No valid {selected_crypto} news events found!")
+            return pd.DataFrame(), []
+        
+        if verbose:
+            print(f"\nProcessing {len(crypto_news)} {selected_crypto} news events...")
+        
+        # Sort price data by timestamp for efficient searching
+        price_df_sorted = price_df.sort_values('unix_timestamp').copy()
+        
+        # Get prices for all events at once
+        timestamps = crypto_news['unix_timestamp'].values
+        price_results = get_prices_at_timestamps(price_df_sorted, timestamps, window=window, threshold=threshold)
+        
+        # Merge price results with news data
+        crypto_news = crypto_news.reset_index(drop=True)
+        crypto_news = pd.concat([crypto_news, price_results[['price_current', 'price_window', 'price_threshold']]], axis=1)
+        
+        # Remove rows with missing price data
+        price_mask = crypto_news[['price_current', 'price_window', 'price_threshold']].notna().all(axis=1)
+        crypto_news = crypto_news[price_mask].copy()
+        
+        if len(crypto_news) == 0:
+            if verbose:
+                print("No valid price data found for news events!")
+            return pd.DataFrame(), []
+        
+        if verbose:
+            print(f"Found price data for {len(crypto_news)} events")
+        
+        # Calculate trading returns
+        crypto_news = calculate_trading_returns(crypto_news, trading_costs)
+        
+        # Print cost information if verbose
+        if verbose and trading_costs is not None:
+            transaction_cost = trading_costs.get('transaction_cost', 0)
+            slippage = trading_costs.get('slippage', 0)
+            total_cost = transaction_cost + slippage
+            print(f"\nApplying trading costs:")
+            print(f"- Transaction cost: {transaction_cost*100:.3f}% per trade")
+            print(f"- Slippage: {slippage*100:.3f}% per trade")
+            print(f"- Total cost per round trip: {2*total_cost*100:.3f}%")
+        elif verbose:
+            print(f"\nNo trading costs applied (ideal conditions)")
+        
+        # Clean up token column
+        crypto_news['token'] = crypto_news[token_col].astype(str).str.upper().str.strip()
+        
+        # Select relevant columns for results
+        result_columns = [
+            'unix_timestamp', 'token', 'price_current', 'price_window', 'price_threshold',
+            'price_change_window', 'position', 'trade_return'
+        ]
+        
+        # For backward compatibility, rename columns for default case
+        if window == 1 and threshold == 10:
+            crypto_news = crypto_news.rename(columns={
+                'price_window': 'price_1min',
+                'price_threshold': 'price_10min',
+                'price_change_window': 'price_change_1min'
+            })
+            result_columns = [
+                'unix_timestamp', 'token', 'price_current', 'price_1min', 'price_10min',
+                'price_change_1min', 'position', 'trade_return'
+            ]
+        
+        results_df = crypto_news[result_columns].copy()
+        returns = results_df['trade_return'].tolist()
+        
+        # Print summary statistics if verbose
+        if verbose:
+            print(f"\nStrategy Results Summary:")
+            print(f"Total trades: {len(results_df)}")
+            print(f"Average return per trade: {np.mean(returns):.4f}")
+            print(f"Win rate: {(np.array(returns) > 0).mean():.2%}")
+        
+        return results_df, returns
+        
+    except Exception as e:
+        if verbose:
+            print(f"Error in backtest execution: {e}")
+        return pd.DataFrame(), []
+
+
+# Alias for backward compatibility - now they use the same optimized function
+execute_backtest_strategy_optimized = execute_backtest_strategy
+
 
